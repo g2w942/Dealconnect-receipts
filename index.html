@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DealConnect Receipt Generator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        /* Base App Styles */
+        body { font-family: Arial, sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
+        .editor-panel { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); width: 100%; max-width: 450px; }
+        .preview-panel { display: flex; flex-direction: column; align-items: center; gap: 15px; }
+        
+        h2 { margin-top: 0; color: #333; font-size: 18px; border-bottom: 2px solid #0b9e43; padding-bottom: 10px; }
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; font-weight: bold; font-size: 12px; margin-bottom: 4px; color: #555; }
+        .form-group input { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        
+        .btn { padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; margin-bottom: 10px; color: white; }
+        .btn-primary { background-color: #0b9e43; }
+        .btn-danger { background-color: #dc3545; }
+        .btn-secondary { background-color: #333; }
+        .flex-row { display: flex; gap: 10px; }
+        
+        .product-entry { background: #f9f9f9; padding: 10px; border: 1px solid #ddd; margin-bottom: 10px; border-radius: 4px; }
+
+        /* EXACT RECEIPT STYLES */
+        #receipt-container {
+            background: #fff;
+            width: 320px;
+            padding: 30px 20px;
+            color: #000;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 11px;
+            line-height: 1.4;
+            box-sizing: border-box;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        
+        .r-center { text-align: center; }
+        .r-logo { max-width: 160px; height: auto; margin-bottom: 10px; }
+        .r-title { font-weight: bold; font-size: 13px; margin-bottom: 15px; }
+        .r-contact { margin-bottom: 15px; }
+        
+        .r-meta { margin-bottom: 20px; }
+        .r-customer { font-weight: bold; margin-bottom: 20px; }
+        
+        .r-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+        .r-table th { border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 5px 0; text-align: left; font-weight: normal; }
+        .r-table td { padding: 5px 0; vertical-align: top; }
+        .r-right { text-align: right !important; }
+        .r-serial-text { font-size: 10px; color: #333; display: block; }
+        
+        .r-totals { width: 100%; margin-bottom: 20px; }
+        .r-row { display: flex; justify-content: space-between; padding: 4px 0; }
+        .r-total-main { border-top: 2px solid #000; border-bottom: 2px solid #000; font-weight: bold; padding: 8px 0; margin-top: 5px; }
+        .r-change-main { border: 2px solid #000; font-weight: bold; padding: 8px 4px; margin-top: 5px; }
+        
+        .r-footer-text { font-size: 10px; margin-bottom: 25px; line-height: 1.3; }
+        
+        /* Security Elements matching original */
+        .r-qr-box { width: 90px; height: 90px; border: 1px solid #000; margin: 0 auto 15px auto; display: flex; align-items: center; justify-content: center; font-size: 8px; color: #999; }
+        .r-primary-serial { font-weight: bold; font-family: monospace; font-size: 12px; margin-bottom: 15px; letter-spacing: 1px; }
+        
+        .r-hashes { display: flex; justify-content: space-between; font-family: monospace; font-size: 10px; margin-bottom: 15px; }
+        .r-hashes div { text-align: center; }
+        
+        .r-session { display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 15px; background: #f0f0f0; padding: 5px; }
+        
+        .r-validation { font-size: 9px; line-height: 1.5; color: #555; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <div class="editor-panel">
+        <h2>Receipt Data Editor</h2>
+        
+        <div class="form-group">
+            <label>Date & Time (Edit exactly as you want it to appear)</label>
+            <input type="text" id="inDate" value="Sat Jun 6, 2026. Time: 11:48:40">
+        </div>
+        <div class="form-group">
+            <label>Entered By</label>
+            <input type="text" id="inEnteredBy" value="GIBSON">
+        </div>
+        <div class="form-group">
+            <label>Customer Line 1</label>
+            <input type="text" id="inCust1" value="CLEVESAFE COMPANY">
+        </div>
+        <div class="form-group">
+            <label>Customer Line 2</label>
+            <input type="text" id="inCust2" value="LIMITED">
+        </div>
+
+        <h3>Items</h3>
+        <div id="item-list">
+            <div class="product-entry" id="item-1">
+                <div class="flex-row">
+                    <div class="form-group" style="width: 20%;"><label>Qty</label><input type="number" class="i-qty" value="1"></div>
+                    <div class="form-group" style="width: 30%;"><label>Item #</label><input type="text" class="i-code" value="2076682"></div>
+                    <div class="form-group" style="width: 50%;"><label>Amount</label><input type="number" class="i-amt" value="2999.00"></div>
+                </div>
+                <div class="form-group"><label>Name</label><input type="text" class="i-name" value="Huawei H155-382 Indoor 5G CPE"></div>
+                <div class="form-group"><label>Serial No (Optional)</label><input type="text" class="i-serial" value="866880062804959"></div>
+            </div>
+            
+            <div class="product-entry" id="item-2">
+                <div class="flex-row">
+                    <div class="form-group" style="width: 20%;"><label>Qty</label><input type="number" class="i-qty" value="1"></div>
+                    <div class="form-group" style="width: 30%;"><label>Item #</label><input type="text" class="i-code" value="2006600"></div>
+                    <div class="form-group" style="width: 50%;"><label>Amount</label><input type="number" class="i-amt" value="29999.00"></div>
+                </div>
+                <div class="form-group"><label>Name</label><input type="text" class="i-name" value="TECNO CAMON 30 256GB"></div>
+                <div class="form-group"><label>Serial No (Optional)</label><input type="text" class="i-serial" value=""></div>
+            </div>
+        </div>
+        
+        <div class="flex-row">
+            <button class="btn btn-secondary" type="button" onclick="addItem()">+ Add Item</button>
+            <button class="btn btn-danger" type="button" onclick="removeItem()">- Remove Item</button>
+        </div>
+
+        <div class="form-group" style="margin-top: 15px;">
+            <label>Total Tendered (Amount given by customer)</label>
+            <input type="number" id="inTendered" value="32998.00">
+        </div>
+
+        <button class="btn btn-primary" type="button" onclick="renderReceipt()" style="font-size: 16px; margin-top: 15px;">🔄 Update Preview</button>
+    </div>
+
+    <div class="preview-panel">
+        <div class="flex-row" style="width: 320px;">
+            <button class="btn btn-primary" type="button" onclick="downloadJPG()">⬇️ JPG</button>
+            <button class="btn btn-secondary" type="button" onclick="downloadPDF()">⬇️ PDF</button>
+        </div>
+
+        <div id="receipt-container">
+            <div class="r-center">
+                <img src="IMG-20260606-WA0002 (1).jpg" alt="Logo" class="r-logo" id="r-logo-img">
+                <div class="r-title">DEALCONNECT EASTAFRICA</div>
+                <div class="r-contact">0722000000<br>EXC NO.:</div>
+            </div>
+
+            <div class="r-meta">
+                Date: <span id="r-date">Sat Jun 6, 2026. Time: 11:48:40</span><br><br>
+                Entered by: <span id="r-entered">GIBSON</span><br><br>
+                Type: SALE
+            </div>
+
+            <div class="r-customer">
+                <span id="r-cust1">CLEVESAFE COMPANY</span><br><br>
+                <span id="r-cust2">LIMITED</span>
+            </div>
+
+            <table class="r-table">
+                <thead>
+                    <tr>
+                        <th>QTY</th>
+                        <th>ITEM #</th>
+                        <th>NAME</th>
+                        <th class="r-right">AMOUNT</th>
+                    </tr>
+                </thead>
+                <tbody id="r-tbody">
+                    </tbody>
+            </table>
+
+            <div class="r-totals">
+                <div class="r-row">
+                    <span>SUB TOTAL</span>
+                    <span id="r-subtotal">32,998.00</span>
+                </div>
+                <div class="r-row r-total-main">
+                    <span>TOTAL</span>
+                    <span>KSh <span id="r-total">32,998.00</span></span>
+                </div>
+                <div class="r-row" style="margin-top: 10px;">
+                    <span>TOTAL TENDERED:</span>
+                    <span id="r-tendered">32,998.00</span>
+                </div>
+                <div class="r-row r-change-main">
+                    <span>CHANGE DUE:</span>
+                    <span>KSh <span id="r-change">0.00</span></span>
+                </div>
+            </div>
+
+            <div class="r-footer-text">
+                All Transactions in KES unless otherwise stated.<br>
+                Thank you for shopping with DealConnect.<br>
+                All goods are sold subject to manufacturer's warranty. The warranty does not cover faults arising from misuse or damage to the goods caused by the user.
+            </div>
+
+            <div class="r-center">
+                <div class="r-qr-box">[ QR ]</div>
+                <div style="font-size: 10px; margin-bottom: 4px;">PRIMARY TRANSACTION SERIAL</div>
+                <div class="r-primary-serial" id="r-tx-serial">DCN-NBI001-RCT-060626-114840-0006-3</div>
+                
+                <div class="r-hashes">
+                    <div>Compact<br><strong id="r-compact">DNC0606260002047</strong></div>
+                    <div>Readable<br><strong id="r-readable">DNC-06JUN26-0006</strong></div>
+                </div>
+
+                <div class="r-session">
+                    <div>Daily #<br><strong>0006</strong></div>
+                    <div>Session #<br><strong>004</strong></div>
+                    <div>Check<br><strong>✔️3</strong></div>
+                </div>
+
+                <div class="r-validation">
+                    Secured with check digit validation<br>
+                    Location: NBI | BNC<br>
+                    Generated: <span id="r-gen-date">06/06/2026, 11:48:40</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let itemCount = 2;
+
+        function addItem() {
+            itemCount++;
+            const container = document.getElementById('item-list');
+            const div = document.createElement('div');
+            div.className = 'product-entry';
+            div.id = 'item-' + itemCount;
+            div.innerHTML = `
+                <div class="flex-row">
+                    <div class="form-group" style="width: 20%;"><label>Qty</label><input type="number" class="i-qty" value="1"></div>
+                    <div class="form-group" style="width: 30%;"><label>Item #</label><input type="text" class="i-code" value=""></div>
+                    <div class="form-group" style="width: 50%;"><label>Amount</label><input type="number" class="i-amt" value="0.00"></div>
+                </div>
+                <div class="form-group"><label>Name</label><input type="text" class="i-name" value=""></div>
+                <div class="form-group"><label>Serial No (Optional)</label><input type="text" class="i-serial" value=""></div>
+            `;
+            container.appendChild(div);
+        }
+
+        function removeItem() {
+            if (itemCount > 1) {
+                const item = document.getElementById('item-' + itemCount);
+                if (item) { item.remove(); itemCount--; }
+            }
+        }
+
+        function formatMoney(amount) {
+            return parseFloat(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function renderReceipt() {
+            // Update Text Fields
+            document.getElementById('r-date').innerText = document.getElementById('inDate').value;
+            document.getElementById('r-entered').innerText = document.getElementById('inEnteredBy').value.toUpperCase();
+            document.getElementById('r-cust1').innerText = document.getElementById('inCust1').value.toUpperCase();
+            document.getElementById('r-cust2').innerText = document.getElementById('inCust2').value.toUpperCase();
+
+            // Process Items and Math
+            const tbody = document.getElementById('r-tbody');
+            tbody.innerHTML = '';
+            let subtotal = 0;
+
+            for (let i = 1; i <= itemCount; i++) {
+                const el = document.getElementById('item-' + i);
+                if (!el) continue;
+
+                const qty = parseInt(el.querySelector('.i-qty').value) || 0;
+                const code = el.querySelector('.i-code').value;
+                const name = el.querySelector('.i-name').value;
+                const amt = parseFloat(el.querySelector('.i-amt').value) || 0;
+                const serial = el.querySelector('.i-serial').value;
+
+                subtotal += (qty * amt);
+
+                const serialHtml = serial ? `<br><span class="r-serial-text">SERIAL NO: ${serial}</span>` : '';
+                
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${qty}</td>
+                    <td>${code}</td>
+                    <td style="padding-right: 5px;">${name}${serialHtml}</td>
+                    <td class="r-right">${formatMoney(amt)}</td>
+                `;
+                tbody.appendChild(tr);
+            }
+
+            // Update Totals
+            const tendered = parseFloat(document.getElementById('inTendered').value) || 0;
+            const change = tendered - subtotal;
+
+            document.getElementById('r-subtotal').innerText = formatMoney(subtotal);
+            document.getElementById('r-total').innerText = formatMoney(subtotal);
+            document.getElementById('r-tendered').innerText = formatMoney(tendered);
+            document.getElementById('r-change').innerText = change >= 0 ? formatMoney(change) : "0.00";
+
+            // Generate fake transaction hashes based on date input to look authentic
+            const rnd1 = Math.floor(1000 + Math.random() * 9000);
+            document.getElementById('r-compact').innerText = "DNC" + rnd1 + "2047";
+        }
+
+        // Standard, robust download functions
+        function downloadJPG() {
+            const receipt = document.getElementById('receipt-container');
+            
+            // To prevent cross-origin issues with local images, we force useCORS
+            html2canvas(receipt, { scale: 3, backgroundColor: "#ffffff", useCORS: true }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = 'DealConnect_Receipt.jpg';
+                link.href = canvas.toDataURL('image/jpeg', 1.0);
+                link.click();
+            }).catch(err => {
+                console.error("Canvas error:", err);
+                alert("Could not generate image. If you are on an Android device, try using standard Chrome.");
+            });
+        }
+
+        function downloadPDF() {
+            if (typeof window.jspdf === 'undefined') {
+                alert("jsPDF library not loaded. Ensure internet connection.");
+                return;
+            }
+            const receipt = document.getElementById('receipt-container');
+            
+            html2canvas(receipt, { scale: 3, backgroundColor: "#ffffff", useCORS: true }).then(canvas => {
+                const imgData = canvas.toDataURL('image/jpeg', 1.0);
+                const { jsPDF } = window.jspdf;
+                // Auto calculate PDF size based on the canvas
+                const pdf = new jsPDF({
+                    orientation: 'portrait',
+                    unit: 'px',
+                    format: [canvas.width / 3, canvas.height / 3]
+                });
+                pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width / 3, canvas.height / 3);
+                pdf.save('DealConnect_Receipt.pdf');
+            }).catch(err => {
+                console.error("PDF error:", err);
+                alert("Could not generate PDF. Check browser permissions.");
+            });
+        }
+
+        // Run render once on load to ensure the preview matches the default form values
+        window.onload = renderReceipt;
+    </script>
+</body>
+</html>
